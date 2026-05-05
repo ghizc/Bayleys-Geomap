@@ -123,7 +123,7 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
                 heading: bearing,
                 range: Math.max(200, 40000 / Math.pow(2, zoom - 10)),
                 defaultUIHidden: true,
-                mode: 'HYBRID' 
+                mode: 'SATELLITE' // <--- Changed from 'HYBRID' to completely remove icons/labels
             });
 
             state.mapInstance.flyTo = function(options) {
@@ -955,8 +955,8 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                     }
                 };
             };
-        } // End of if (state.currentUser?.id === ADMIN_UUID)
-    } // End of if (containerId === 'adminMap')
+        } 
+    } 
 
     parentContainer.appendChild(controlsGroup);
 }
