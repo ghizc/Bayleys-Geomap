@@ -7,8 +7,8 @@ import { log, showDetail, getPremiseDisplayData } from './ui.js';
 let clusterer = null;
 let googleMarkers = [];
 
-// THE FIX: Restored to your stable Vector 3D engine instead of the experimental Photo 3D
-if (!state.currentMapMode) state.currentMapMode = 'vector3d';
+// Default map mode
+if (!state.currentMapMode) state.currentMapMode = 'photo3d';
 
 // ==========================================
 // RIGHT-CLICK NAVIGATION OVERRIDE
@@ -51,7 +51,7 @@ if (!window._rightClickInitialized) {
         
         const newHeading = sHeading - dX; 
         
-        // Pushing UP (negative dY) now correctly increases tilt (looks at horizon)
+        // FIXED: Pushing UP (negative dY) now correctly increases tilt (looks at horizon)
         // Pulling DOWN (positive dY) decreases tilt (looks straight down at 0)
         const maxTilt = state.currentMapMode === 'photo3d' ? 90 : 67.5;
         const newTilt = Math.max(0, Math.min(sTilt - dY, maxTilt)); 
@@ -80,12 +80,12 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
 
     const parentContainer = document.getElementById(containerId);
     
-    // Preserve Mobile Controls before wiping the map container
+    // --- FIX: Preserve Mobile Controls before wiping the map container ---
     let savedMobileControls = null;
     const existingMobileControls = document.getElementById('mobileMapControls');
     if (existingMobileControls && existingMobileControls.parentNode === parentContainer) {
         savedMobileControls = existingMobileControls;
-        parentContainer.removeChild(savedMobileControls); 
+        parentContainer.removeChild(savedMobileControls); // Safely detach it
     }
     
     if (state.mapInstance) {
@@ -104,7 +104,7 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
     mapWrapper.style.position = 'absolute';
     mapWrapper.style.top = '0';
     mapWrapper.style.left = '0';
-    mapWrapper.style.overflow = 'hidden'; 
+    mapWrapper.style.overflow = 'hidden'; // Add this line
     parentContainer.appendChild(mapWrapper);
 
     const centerLat = centerArray[1];
@@ -122,7 +122,8 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
                 tilt: pitch,
                 heading: bearing,
                 range: Math.max(200, 40000 / Math.pow(2, zoom - 10)),
-                defaultUIHidden: true
+                defaultUIHidden: true,
+                mode: 'HYBRID' 
             });
 
             state.mapInstance.flyTo = function(options) {
@@ -199,7 +200,7 @@ export async function initMap(containerId, centerArray, zoom, pitch = 60, bearin
             setupCustomUI(parentContainer, containerId, [centerLng, centerLat], zoom);
         }
 
-        // Restore the mobile controls after the new map mode loads
+        // --- FIX: Restore the mobile controls after the new map mode loads ---
         if (savedMobileControls) {
             parentContainer.appendChild(savedMobileControls);
         }
@@ -234,7 +235,6 @@ export async function addMarkers(list) {
     }
 
     list.forEach(p => {
-        // Safe check to ensure we don't try to plot NULL coordinates
         if (p.lat && p.lng) {
             // 1. Get Job Status & Assign Color
             const { status } = getPremiseDisplayData(p);
@@ -406,6 +406,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
     controlsGroup.appendChild(btnModeToggle); 
 
     // --- FIX: ADD RECENTER BUTTON ONLY TO PREMISES MAP ---
+    // It is injected natively into the control group so it stacks perfectly!
     if (containerId === 'premisesMap') {
         const btnRecenter = document.createElement('button');
         btnRecenter.className = 'icon-ctrl-btn mobile-only';
@@ -414,6 +415,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
         btnRecenter.onclick = () => {
             if (window.recenterMap) window.recenterMap();
         };
+        // Insert it BEFORE the mode toggle so it sits right on top of it
         controlsGroup.insertBefore(btnRecenter, btnModeToggle);
     }
 
@@ -581,9 +583,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                 return `Synced ${count} logos.`;
             }, btnSyncLogos.innerHTML, btnSyncLogos);
 
-            // THE TARGETED FIX FOR THE MISSING COORDINATES BUTTON
             btnFix.onclick = async () => runTool("Fixing Coordinates...", async () => {
-                // Ensure we scan ALL premises, not just the first 1000!
                 let allPremises = []; let fetchMore = true; let from = 0; const step = 999;
                 while (fetchMore) {
                     const { data, error } = await supabase.from('premises').select('*').range(from, from + step);
@@ -592,8 +592,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                     if (!data || data.length <= step) { fetchMore = false; }
                 }
 
-                // Look for premises where the lat/lng is exactly null
-                const missing = allPremises.filter(p => p.lat === null && p.address && p.address.trim() !== '');
+                const missing = allPremises.filter(p => (p.lat === null || p.lat === undefined || p.lat === '') && p.address && p.address.trim() !== '');
                 if (missing.length === 0) return "No valid addresses to fix!";
                 
                 let count = 0;
@@ -602,14 +601,11 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                         let query = encodeURIComponent(p.address);
                         let res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${query}.json?access_token=${MAPBOX_TOKEN}&country=nz,au&limit=1`);
                         let json = await res.json();
-                        
-                        // Fallback logic if the exact address fails
                         if (!json.features || json.features.length === 0) {
                             let fallbackQuery = encodeURIComponent(p.address.replace(/^[A-Z0-9]+\//i, '').replace(/^(\d+)-(\d+)/, '$1').replace(/&.*?(?=\s[A-Z])/i, '').trim());
                             res = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${fallbackQuery}.json?access_token=${MAPBOX_TOKEN}&country=nz,au&limit=1`);
                             json = await res.json();
                         }
-                        
                         if (json.features?.length > 0) {
                             const { error: updateErr } = await supabase.from('premises').update({ lat: json.features[0].center[1], lng: json.features[0].center[0] }).eq('id', p.id);
                             if (!updateErr) { count++; statusBox.innerText = `Fixed ${count} of ${missing.length}`; }
@@ -649,11 +645,12 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
             btnExtractDates.onclick = async () => runTool("Extracting PDF Dates...", async () => {
                 let totalUpdated = 0; 
                 let hasMore = true; 
-                let currentCursor = null; 
+                let currentCursor = null; // Changed to start at null
                 
                 while (hasMore) {
                     statusBox.innerText = `Scanning PDF Batch... (${totalUpdated} updated so far)`;
                     
+                    // Passing 'lastJobNumber' instead of 'lastId'
                     const { data, error } = await supabase.functions.invoke('extract-pdf-dates', {
                         body: { lastJobNumber: currentCursor } 
                     });
@@ -662,7 +659,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                     if (data && data.error) throw new Error(data.error);
                     
                     totalUpdated += (data.count || 0); 
-                    currentCursor = data.nextJobNumber; 
+                    currentCursor = data.nextJobNumber; // Grabs the next Job Number from the backend
                     hasMore = data.hasMore; 
 
                     if (!hasMore) break;
@@ -932,6 +929,7 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                     }
                 };
 
+                // --- NEW: SHARE ONLY BUTTON LOGIC ---
                 document.getElementById('shareOnlyBtn').onclick = async () => {
                     const masterId = document.getElementById('mergeMaster').value;
                     const masterName = document.getElementById('mergeMaster').options[document.getElementById('mergeMaster').selectedIndex]?.text;
@@ -957,8 +955,8 @@ function setupCustomUI(parentContainer, containerId, centerArray, zoom) {
                     }
                 };
             };
-        } 
-    } 
+        } // End of if (state.currentUser?.id === ADMIN_UUID)
+    } // End of if (containerId === 'adminMap')
 
     parentContainer.appendChild(controlsGroup);
 }
