@@ -8,7 +8,7 @@ import { initMap, addMarkers, highlightMarker } from './map.js';
 import { 
     log, toggleDashboardOverlay, renderBICharts, filterAdminView, 
     loadClientView, showDetail, updateGalleryImage, switchScreen, 
-    renderFilterDropdown, normalizeStatus 
+    renderFilterDropdown, normalizeStatus, getPremiseDisplayData 
 } from './ui.js';
 import './modals.js'; // Running this executes the modal setup code
 
@@ -646,43 +646,25 @@ document.addEventListener('click', (e) => {
 });
 
 // Detail Panel Gallery Navigation
-document.getElementById('nextImgBtn').onclick = (e) => {
+document.getElementById('nextImgBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     state.currentGalleryIndex = (state.currentGalleryIndex + 1) % state.currentGalleryImages.length;
     updateGalleryImage();
-};
+});
 
-document.getElementById('prevImgBtn').onclick = (e) => {
+document.getElementById('prevImgBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     state.currentGalleryIndex = (state.currentGalleryIndex - 1 + state.currentGalleryImages.length) % state.currentGalleryImages.length;
     updateGalleryImage();
-};
-
-document.getElementById('closeDetailBtn').onclick = () => {
-    document.getElementById('propertyDetailPanel').classList.remove('active', 'minimized'); // Fixed to wipe minimized state
-    state.currentViewedPremise = null;
-    
-    // Clear both highlights
-    import('./map.js').then(mapMod => mapMod.highlightMarker(null));
-    if (window.highlightSidebarCard) window.highlightSidebarCard(null); 
-    
-    if (state.mapInstance) state.mapInstance.flyTo({ zoom: 14, pitch: 0 });
-    
-    if (document.getElementById('clientListScreen').classList.contains('active')) {
-        const isMobile = window.innerWidth <= 900 || document.body.classList.contains('sim-mobile') || document.body.classList.contains('sim-tablet');
-        toggleDashboardOverlay(!isMobile);
-    } else if (document.getElementById('premisesScreen').classList.contains('active')) {
-        document.getElementById('requestReportBtn').style.display = 'flex';
-    }
-};
+});
 
 // NEW: Minimize Panel Toggle
-document.getElementById('minimizeDetailBtn').onclick = (e) => {
+document.getElementById('minimizeDetailBtn')?.addEventListener('click', (e) => {
     e.stopPropagation();
     document.getElementById('propertyDetailPanel').classList.toggle('minimized');
-};
+});
 
-document.getElementById('backToAdminBtn').onclick = async () => {
+document.getElementById('backToAdminBtn')?.addEventListener('click', async () => {
     state.currentUser = { role: 'admin', name: 'Bayleys Admin', id: ADMIN_UUID };
     await window.refreshAppAdminData();
     switchScreen('clientListScreen');
@@ -690,7 +672,7 @@ document.getElementById('backToAdminBtn').onclick = async () => {
     const searchInput = document.getElementById('adminSearchInput');
     searchInput.value = '';
     document.getElementById('adminClearSearch').style.display = 'none';
-};
+});
 
 window.updateQuoteStatus = async (id, newStatus) => {
     try {
@@ -777,3 +759,102 @@ window.generateWFMQuote = async (requestId, event) => {
         btn.disabled = false;
     }
 };
+
+// --- SHAREPOINT LIGHTBOX LOGIC ---
+document.getElementById('maximizeGalleryBtn')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const panel = document.getElementById('propertyDetailPanel');
+    const btn = e.currentTarget;
+    if (!panel) return;
+
+    const isFullscreen = panel.classList.toggle('fullscreen-gallery');
+    
+    if (isFullscreen) {
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg>`;
+
+        const p = state.currentViewedPremise;
+        const { reports } = getPremiseDisplayData(p); 
+        let foundSharePointImages = false;
+        let lastErrorMsg = "";
+
+        document.getElementById('imgCounter').innerText = "⌛ Syncing SharePoint...";
+
+        for (const report of reports) {
+            if (report.info_url) {
+                try {
+                    const { data, error } = await supabase.functions.invoke('get-sharepoint-images', {
+                        body: { folderUrl: report.info_url }
+                    });
+
+                    // Catch Edge Function execution errors
+                    if (error) {
+                        lastErrorMsg = error.message;
+                        console.error(`Edge Error on Job ${report.job_number}:`, error);
+                        continue;
+                    }
+
+                    // Catch Microsoft Graph API errors returned by the Edge Function
+                    if (data && data.error) {
+                        lastErrorMsg = data.error;
+                        console.error(`Graph Error on Job ${report.job_number}:`, data.error);
+                        continue;
+                    }
+
+                    // Success! Load images and break the loop
+                    if (data && data.images && data.images.length > 0) {
+                        state.currentGalleryImages = data.images;
+                        state.currentGalleryIndex = 0;
+                        updateGalleryImage(); 
+                        foundSharePointImages = true;
+                        break; 
+                    }
+                } catch(err) {
+                    lastErrorMsg = err.message;
+                }
+            }
+        }
+
+        if (!foundSharePointImages) {
+            // Print the error directly to the screen so we aren't guessing
+            if (lastErrorMsg) {
+                document.getElementById('imgCounter').innerText = "SP Error: " + lastErrorMsg.substring(0, 40) + "...";
+            } else {
+                document.getElementById('imgCounter').innerText = "No images found in any job folders.";
+            }
+            
+            setTimeout(() => {
+                const { images } = getPremiseDisplayData(state.currentViewedPremise);
+                state.currentGalleryImages = images.length > 0 ? images : ['https://via.placeholder.com/450x360?text=No+Image'];
+                state.currentGalleryIndex = 0;
+                updateGalleryImage();
+            }, 3500); // Give user time to read the error message
+        }
+
+    } else {
+        btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg>`;
+        const { images } = getPremiseDisplayData(state.currentViewedPremise);
+        state.currentGalleryImages = images.length > 0 ? images : ['https://via.placeholder.com/450x360?text=No+Image'];
+        state.currentGalleryIndex = 0;
+        updateGalleryImage();
+    }
+});
+
+// IMPORTANT: Merged closeDetailBtn logic to ensure it wipes the fullscreen state safely
+document.getElementById('closeDetailBtn')?.addEventListener('click', () => {
+    const panel = document.getElementById('propertyDetailPanel');
+    if (panel) panel.classList.remove('active', 'minimized', 'fullscreen-gallery'); // Clean slate
+    state.currentViewedPremise = null;
+    
+    // Restore sidebar highlights and map zoom
+    import('./map.js').then(mapMod => mapMod.highlightMarker(null));
+    if (window.highlightSidebarCard) window.highlightSidebarCard(null); 
+    
+    if (state.mapInstance) state.mapInstance.flyTo({ zoom: 14, pitch: 0 });
+    
+    if (document.getElementById('clientListScreen').classList.contains('active')) {
+        const isMobile = window.innerWidth <= 900 || document.body.classList.contains('sim-mobile') || document.body.classList.contains('sim-tablet');
+        toggleDashboardOverlay(!isMobile);
+    } else if (document.getElementById('premisesScreen').classList.contains('active')) {
+        document.getElementById('requestReportBtn').style.display = 'flex';
+    }
+});
