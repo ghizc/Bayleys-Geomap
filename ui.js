@@ -294,30 +294,40 @@ export function renderFilterDropdown(type) {
 export function getPremiseDisplayData(premise) {
     const reports = premise.reports ? premise.reports : state.allReportsData.filter(r => String(r.premise_id) === String(premise.id));
     
+    // Sort from newest job to oldest job based on job number
     const sortedReports = [...reports].sort((a, b) => {
         const jobA = parseInt(String(a.job_number).replace(/\D/g, '')) || 0;
         const jobB = parseInt(String(b.job_number).replace(/\D/g, '')) || 0;
         return jobB - jobA; 
     });
 
-    let allImages = [];
-    sortedReports.forEach(report => {
+    let jobImages = [];
+
+    // Loop through the sorted reports, starting with the newest
+    for (const report of sortedReports) {
         if (report.image_url) {
+            let parsedImages = [];
             try {
                 const parsed = Array.isArray(report.image_url) ? report.image_url : JSON.parse(report.image_url);
-                if (Array.isArray(parsed)) allImages.push(...parsed);
+                if (Array.isArray(parsed)) parsedImages.push(...parsed);
             } catch(e) {
-                allImages.push(...report.image_url.split(',').map(s => s.trim()));
+                parsedImages.push(...report.image_url.split(',').map(s => s.trim()));
+            }
+            
+            // If this job actually has images, save them and STOP searching older jobs
+            if (parsedImages.length > 0) {
+                jobImages = parsedImages;
+                break; 
             }
         }
-    });
+    }
 
     return { 
         reports: sortedReports,
         latest: sortedReports.length > 0 ? sortedReports[0] : {},
         status: sortedReports.length > 0 ? (sortedReports[0].status || 'Complete') : 'Complete',
-        images: allImages,
-        displayImage: allImages.length > 0 ? allImages[0] : null
+        images: jobImages, // Now only contains images from the latest valid job
+        displayImage: jobImages.length > 0 ? jobImages[0] : null
     };
 }
 
