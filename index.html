@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="YpfXVdnP2E31b6D7BBWvuR-oDred-P5Rdt3sK3fogGk" />
+    <title>Bayleys Property Vault</title>
+    
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#00264b">
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Bayleys Vault">
+    <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./service-worker.js')
+                    .then(reg => console.log('PWA Service Worker Registered!'))
+                    .catch(err => console.error('PWA Registration Failed:', err));
+            });
+        }
+    </script>
+    <script type="module" src="app.js"></script>
+
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAfsH1DWFwEOhVX3LDCmiZ5GazaTPgwWYQ&v=alpha&libraries=marker"></script>
+    <script src="https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="deviceSimulator" style="position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 999999; background: #0f172a; padding: 6px; border-radius: 30px; display: none; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 2px solid #334155; align-items: center;">
+        
+        <div style="display: flex; gap: 4px; border-right: 2px solid #334155; padding-right: 8px;">
+            <button onclick="updateSim('desktop', null, this)" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;" data-type="dev">Laptop</button>
+            <button onclick="updateSim('tablet', null, this)" style="background: transparent; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;" data-type="dev">Tablet</button>
+            <button onclick="updateSim('foldable', null, this)" style="background: transparent; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;" data-type="dev">Foldable</button>
+            <button onclick="updateSim('mobile', null, this)" style="background: transparent; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;" data-type="dev">Phone</button>
+        </div>
+
+        <div id="simOrientGroup" style="display: none; gap: 4px;">
+            <button onclick="updateSim(null, 'portrait', this)" style="background: #334155; color: white; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;" data-type="orient" title="Portrait">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg>
+            </button>
+            <button onclick="updateSim(null, 'landscape', this)" style="background: transparent; color: white; border: none; width: 34px; height: 34px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;" data-type="orient" title="Landscape">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="transform: rotate(90deg);"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12" y2="18"></line></svg>
+            </button>
+        </div>
+    </div>
+    
+    <div id="pwaInstallPrompt" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 15px 35px rgba(0,38,75,0.3); z-index: 999999; width: 90%; max-width: 400px; border: 2px solid #0284c7; text-align: center; flex-direction: column; gap: 12px; font-family: -apple-system, sans-serif;">
+        
+        <div style="display: flex; align-items: center; gap: 12px; text-align: left;">
+            <img src="icon-192.png" alt="App Icon" style="width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">            <div>
+                <div style="font-weight: 800; color: #0f172a; font-size: 15px;">Install Bayleys Vault</div>
+                <div id="pwaInstallText" style="font-size: 12px; color: #64748b; margin-top: 2px; line-height: 1.3;">Add to your home screen for quick access.</div>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; width: 100%;">
+            <button onclick="document.getElementById('pwaInstallPrompt').style.display='none'" style="flex: 1; padding: 10px; border: none; background: #f1f5f9; border-radius: 8px; color: #475569; font-weight: 700; cursor: pointer; font-size: 13px;">Not Now</button>
+            <button id="pwaInstallBtn" style="display: none; flex: 1; padding: 10px; border: none; background: #0284c7; border-radius: 8px; color: white; font-weight: 700; cursor: pointer; font-size: 13px;">Install App</button>
+        </div>
+    </div>
+    
+    <script>
+        // Store current simulator state globally
+        window.simState = { mode: 'desktop', orient: 'portrait' };
+
+        // Real-world dimensions (Width x Height) for Portrait and Landscape
+        const simDimens = {
+            tablet:   { portrait: [820, 1180], landscape: [1180, 820] }, // iPad Air
+            foldable: { portrait: [650, 812],  landscape: [812, 650] },  // Samsung Fold / Oppo Find N
+            mobile:   { portrait: [375, 812],  landscape: [812, 375] }   // iPhone X
+        };
+
+        function updateSim(mode, orient, btn) {
+            // 1. Update active states/globals
+            if (mode) {
+                window.simState.mode = mode;
+                document.querySelectorAll('#deviceSimulator button[data-type="dev"]').forEach(b => b.style.background = 'transparent');
+            }
+            if (orient) {
+                window.simState.orient = orient;
+                document.querySelectorAll('#deviceSimulator button[data-type="orient"]').forEach(b => b.style.background = 'transparent');
+            }
+            btn.style.background = '#334155'; // Active color
+
+            // 2. Prep Body classes
+            const currentMode = window.simState.mode;
+            const currentOrient = window.simState.orient;
+            const orientGroup = document.getElementById('simOrientGroup');
+            
+            document.body.classList.remove('sim-mobile', 'sim-foldable', 'sim-tablet', 'sim-landscape', 'sim-portrait');
+            
+            // 3. Reset Body styles (in case JS set them manually before)
+            document.body.style.width = ''; document.body.style.height = ''; 
+            document.body.style.borderRadius = ''; document.body.style.border = ''; document.body.style.margin = '';
+
+            // 4. Apply Simulator Logic
+            const dash = document.getElementById('adminDashboardWidgets');
+
+            if (currentMode === 'desktop') {
+                orientGroup.style.display = 'none';
+                // Restore Dashboard if on Admin Screen
+                if (dash && document.getElementById('clientListScreen').classList.contains('active')) { 
+                    dash.style.display = 'flex'; setTimeout(() => dash.classList.remove('hidden'), 10); 
+                }
+            } else {
+                orientGroup.style.display = 'flex';
+                // Always hide dashboard in simulated mobile views
+                if (dash) { dash.classList.add('hidden'); setTimeout(() => dash.style.display = 'none', 300); }
+
+                // Apply dynamic CSS classes and dimensions directly via inline style (overriding CSS rules)
+                document.body.classList.add(`sim-${currentMode}`, `sim-${currentOrient}`);
+                
+                const dimensions = simDimens[currentMode][currentOrient];
+                document.body.style.width = `${dimensions[0]}px`;
+                document.body.style.height = `${dimensions[1]}px`;
+            }
+            
+            // 5. Trigger resize to force map/charts to refresh layouts
+            setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 300);
+        }
+    </script>
+
+    <div id="debugConsole"></div>
+
+    <div id="requestReportBtn">
+        <button class="btn-float" onclick="openRequestModal()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            Request a Report
+        </button>
+    </div>
+
+    <div id="requestModalOverlay" class="modal-overlay">
+        <div class="modal-card" style="width: 750px;"> <div class="modal-header">
+                <div>
+                    <h2>New Report Request</h2>
+                    <h4>We will email you with a quote before proceeding</h4>
+                </div>
+                <button class="modal-close" onclick="closeRequestModal()">✕</button>
+            </div>
+            <form id="requestReportForm">
+                <div class="modal-body">
+                    
+                    <div class="form-group">
+                        <label class="form-label label-with-action">
+                            <span>Client Manager (Contact)</span>
+                            <span class="label-action-link" onclick="openAddContactModal()">+ Add New Contact</span>
+                        </label>
+                        <select id="reqContactId" class="form-input" required style="cursor:pointer; font-weight: 500;">
+                            <option value="" disabled selected>Loading contacts...</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-top: 24px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">
+                        <label class="form-label" style="margin: 0; color: #0284c7; font-size: 13px;">Premises & Report Details</label>
+                        <button type="button" class="btn-cancel" onclick="addPremiseRow()" style="padding: 4px 12px; font-size: 11px; height: auto; border-color: #cbd5e1; background: #f8fafc; font-weight: 600;">+ Add Another Premise</button>
+                    </div>
+                    
+                    <div id="reqPremisesContainer" style="background: #f1f5f9; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+                        </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Additional Notes</label>
+                        <textarea id="reqNotes" class="form-input" placeholder="Any specific instructions, context, or details for the surveyor..." style="resize: vertical; min-height: 80px;"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeRequestModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitRequestBtn" style="width: auto; padding: 12px 32px;">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="addContactModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 480px;">
+            <div class="modal-header" style="background: #0284c7;">
+                <div>
+                    <h2>Add New Contact</h2>
+                </div>
+                <button class="modal-close" onclick="closeAddContactModal()">✕</button>
+            </div>
+            <form id="addContactForm">
+                <div class="modal-body">
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">First Name</label><input type="text" id="newContFirst" class="form-input" required placeholder="Jane"></div>
+                        <div class="form-group"><label class="form-label">Last Name</label><input type="text" id="newContLast" class="form-input" required placeholder="Doe"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="newContEmail" class="form-input" required placeholder="jane@company.com"></div>
+                        <div class="form-group"><label class="form-label">Mobile</label><input type="text" id="newContMobile" class="form-input" placeholder="+64 21..."></div>
+                    </div>
+                    <div class="form-group"><label class="form-label">Position / Title</label><input type="text" id="newContPosition" class="form-input" placeholder="Property Manager"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeAddContactModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitContactBtn" style="width: auto; background: #0284c7; border-color: #0284c7;">Save Contact</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editContactModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 520px;">
+            <div class="modal-header" style="background: #0284c7;">
+                <div>
+                    <h2>Edit Contact</h2>
+                    <h4>Update details or paste a profile photo</h4>
+                </div>
+                <button class="modal-close" onclick="closeEditContactModal()">✕</button>
+            </div>
+            <form id="editContactForm">
+                <div class="modal-body" id="editContactBody" tabindex="0" style="outline: none;">
+                    
+                    <div style="display: flex; gap: 20px; margin-bottom: 24px; align-items: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: #f1f5f9; overflow: hidden; border: 2px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 24px; font-weight: bold;" id="editContPicPreview">
+                            <span id="editContInitials">?</span>
+                            <img src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" id="editContImgElement">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <div class="file-upload-box" id="editContImageDropZone" style="min-height: 80px; padding: 12px;">
+                                <input type="file" id="editContImage" accept=".jpg, .jpeg, .png, .webp" onchange="previewContactImage(this)">
+                                <div class="file-label-text" style="font-size: 12px;">Click to Browse or <br><b style="color:#0284c7; font-size: 14px;">CTRL+V to Paste Image</b></div>
+                                <div id="editContImageName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">First Name</label><input type="text" id="editContFirst" class="form-input" required></div>
+                        <div class="form-group"><label class="form-label">Last Name</label><input type="text" id="editContLast" class="form-input" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="editContEmail" class="form-input"></div>
+                        <div class="form-group"><label class="form-label">Mobile</label><input type="text" id="editContMobile" class="form-input"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Position / Title</label><input type="text" id="editContPosition" class="form-input"></div>
+                        <div class="form-group"><label class="form-label">LinkedIn URL</label><input type="url" id="editContLinkedin" class="form-input" placeholder="https://linkedin.com/in/..."></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeEditContactModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitEditContactBtn" style="width: auto; background: #0284c7; border-color: #0284c7;">Save Updates</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createAdminContactModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 520px;">
+            <div class="modal-header" style="background: #10b981;">
+                <div>
+                    <h2>Create New Contact</h2>
+                    <h4>Assign to a client and add details</h4>
+                </div>
+                <button class="modal-close" onclick="closeCreateAdminContactModal()">✕</button>
+            </div>
+            <form id="createAdminContactForm">
+                <div class="modal-body" id="createAdminContactBody" tabindex="0" style="outline: none;">
+                    
+                    <div class="form-group">
+                        <label class="form-label">Client (Company)</label>
+                        <select id="createContClient" class="form-input" required style="cursor:pointer; font-weight: 500;">
+                            <option value="" disabled selected>Select a Client...</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 20px; margin-bottom: 24px; align-items: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 50%; background: #f1f5f9; overflow: hidden; border: 2px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 24px; font-weight: bold;" id="createContPicPreview">
+                            <span id="createContInitials">?</span>
+                            <img src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" id="createContImgElement">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <div class="file-upload-box" id="createContImageDropZone" style="min-height: 80px; padding: 12px;">
+                                <input type="file" id="createContImage" accept=".jpg, .jpeg, .png, .webp" onchange="previewNewContactImage(this)">
+                                <div class="file-label-text" style="font-size: 12px;">🖼️ Click to Browse or <br><b style="color:#10b981; font-size: 14px;">CTRL+V to Paste Image</b></div>
+                                <div id="createContImageName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">First Name</label><input type="text" id="createContFirst" class="form-input" required></div>
+                        <div class="form-group"><label class="form-label">Last Name</label><input type="text" id="createContLast" class="form-input" required></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="createContEmail" class="form-input"></div>
+                        <div class="form-group"><label class="form-label">Mobile</label><input type="text" id="createContMobile" class="form-input"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label class="form-label">Position / Title</label><input type="text" id="createContPosition" class="form-input"></div>
+                        <div class="form-group"><label class="form-label">LinkedIn URL</label><input type="url" id="createContLinkedin" class="form-input" placeholder="https://linkedin.com/in/..."></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreateAdminContactModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitCreateAdminContactBtn" style="width: auto; background: #10b981; border-color: #10b981;">Save Contact</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="editReportModalOverlay" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>Edit Report</h2>
+                    <h4>Update details or append cover images</h4>
+                </div>
+                <button class="modal-close" onclick="closeEditReportModal()">✕</button>
+            </div>
+            <form id="editReportForm">
+                <div class="modal-body" id="editReportBody" tabindex="0" style="outline: none;">
+                
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Surveyor Name</label>
+                            <select id="editRepSurveyor" class="form-input" style="cursor:pointer;">
+                                <option value="" selected>Select...</option>
+                                <option value="David Guy">David Guy</option>
+                                <option value="Hamish McDonald">Hamish McDonald</option>
+                                <option value="Jason Mahey">Jason Mahey</option>
+                                <option value="Kieran Hindley">Kieran Hindley</option>
+                                <option value="Ben Lewis">Ben Lewis</option>
+                                <option value="Kyle Cowan">Kyle Cowan</option>
+                                <option value="David Soper">David Soper</option>
+                                <option value="Graham Englund">Graham Englund</option>
+                                <option value="Jerome Edwards">Jerome Edwards</option>
+                                <option value="Jordan Morris">Jordan Morris</option>
+                                <option value="Lucie Kendall">Lucie Kendall</option>
+                                <option value="Neil Smith">Neil Smith</option>
+                                <option value="Nicole Mabvurira">Nicole Mabvurira</option>
+                                <option value="Paul Wharton">Paul Wharton</option>
+                                <option value="Raj Badwal">Raj Badwal</option>
+                                <option value="Ulamila Dalo">Ulamila Dalo</option>
+                                <option value="Will Stockley">Will Stockley</option>
+                                <option value="William Scott-Green">William Scott-Green</option>
+                                <option value="Yousr Salema">Yousr Salema</option>
+                                <option value="Philip Hall">Philip Hall</option>
+                                <option value="Liam Cavanagh">Liam Cavanagh</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Property Name (Report Title)</label>
+                        <input type="text" id="editRepName" class="form-input" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Inspection Date</label>
+                            <input type="date" id="editRepDate" class="form-input">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Delivery Date</label>
+                            <input type="date" id="editRepDeliveryDate" class="form-input">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">PDF URL</label>
+                            <input type="url" id="editRepPdf" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Info URL</label>
+                            <input type="url" id="editRepInfo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Invoice URL</label>
+                            <input type="url" id="editRepInvoice" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Video URL</label>
+                            <input type="url" id="editRepVideo" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Append Cover Images</label>
+                        <div class="form-group">
+                            <div class="file-upload-box" id="editRepImageDropZone" style="min-height: 80px;">
+                                <input type="file" id="editRepImages" multiple accept=".jpg, .jpeg, .png, .webp" onchange="updateFileName(this, 'editRepImagesName')">
+                                <div class="file-label-text" style="font-size: 12px;">🖼️ Click to Browse or <br><b style="color:#0284c7; font-size: 14px;">CTRL+V to Paste Image</b></div>
+                                <div id="editRepImagesName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeEditReportModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitEditReportBtn" style="width: auto; padding: 12px 32px;">Save Updates</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createClientModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 450px;">
+            <div class="modal-header">
+                <div>
+                    <h2>Create Client</h2>
+                </div>
+                <button class="modal-close" onclick="closeCreateClientModal()">✕</button>
+            </div>
+            <form id="createClientForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Client Name</label>
+                        <input type="text" id="newClientName" class="form-input" required placeholder="e.g. Foodstuffs">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Access Code (Optional)</label>
+                        <input type="text" id="newClientCode" class="form-input" placeholder="e.g. FDS123">
+                    </div>
+                    
+                    <div style="margin-top: 16px;">
+                        <label class="form-label" style="margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px;">Client Logo (Optional)</label>
+                        <div class="form-group">
+                            <div class="file-upload-box" id="newClientLogoDropZone" style="min-height: 80px;">
+                                <input type="file" id="newClientLogo" accept=".jpg, .jpeg, .png, .webp" onchange="updateFileName(this, 'newClientLogoName')">
+                                <div class="file-label-text">🖼️ Drop Logo Here or Click to Browse</div>
+                                <div id="newClientLogoName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreateClientModal()">Back</button>
+                    <button type="submit" class="btn-access" id="submitCreateClientBtn" style="width: auto; padding: 12px 32px;">Save Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="createPremiseModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div>
+                    <h2>Create Premise</h2>
+                    <h4>Address will be auto-geocoded on save</h4>
+                </div>
+                <button class="modal-close" onclick="closeCreatePremiseModal()">✕</button>
+            </div>
+            <form id="createPremiseForm">
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">Premise Name</label>
+                        <input type="text" id="newPremiseName" class="form-input" required placeholder="e.g. Four Square Hokitika">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Full Address</label>
+                        <input type="text" id="newPremiseAddress" class="form-input" required placeholder="123 Example St, City">
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Sector</label>
+                            <select id="newPremiseSector" class="form-input">
+                                <option value="" disabled selected>Select...</option>
+                                <option value="Commercial - Office">Commercial - Office</option>
+                                <option value="Commercial - Retail">Commercial - Retail</option>
+                                <option value="Industrial - Light">Industrial - Light</option>
+                                <option value="Industrial - Heavy">Industrial - Heavy</option>
+                                <option value="Industrial - Service">Industrial - Service</option>
+                                <option value="Rural - Agriculture">Rural - Agriculture</option>
+                                <option value="Rural - Lifestyle">Rural - Lifestyle</option>
+                                <option value="Special Purpose">Special Purpose</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Legal Description</label>
+                            <input type="text" id="newPremiseLegal" class="form-input" placeholder="e.g. Lot 8 DP 199046">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Floor Area</label>
+                            <input type="text" id="newPremiseFloor" class="form-input" placeholder="e.g. 5,000 sqm">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Site Area</label>
+                            <input type="text" id="newPremiseSite" class="form-input" placeholder="e.g. 1.2 ha">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Year Built</label>
+                            <input type="number" id="newPremiseYear" class="form-input" placeholder="YYYY">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeCreatePremiseModal()">Back</button>
+                    <button type="submit" class="btn-access" id="submitCreatePremiseBtn" style="width: auto; padding: 12px 32px;">Save Premise</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="loginScreen" class="screen active">
+        <div id="loginMapBackground"></div>
+        <div class="login-card">
+            <div class="login-header"><h1>BAYLEYS</h1><p>Property Vault</p></div>
+            <form id="loginForm">
+                <div class="form-group"><label class="form-label">User ID</label><input type="text" class="form-input" id="userId" placeholder="Centuria" required></div>
+                <div class="form-group"><label class="form-label">Password</label><input type="password" class="form-input" id="userPassword" placeholder="cent123" required></div>
+                <button type="submit" class="btn-access" id="loginBtn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="clientListScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h1 style="margin-top: 15px;">BAYLEYS</h1>
+                <h3 style="margin-top: 15px;">Building Consultancy</h3>
+                <p>Admin Console</p>
+            </div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;"><div class="avatar">BA</div><div><div style="font-size:13px; font-weight:600; color:#0f172a;">Bayleys Admin</div><div style="font-size:10px; color:#64748b; font-weight:500;">ADMINISTRATOR</div></div></div>
+                <div class="logout-link" onclick="window.location.reload()">LOGOUT</div>
+            </div>
+            <div class="sidebar-search-container">
+                <div class="search-row">
+                    <div class="search-input-wrapper" style="flex:1;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <input type="text" id="adminSearchInput" placeholder="Search database...">
+                        <button class="clear-btn" id="adminClearSearch" style="display:none;">✕</button>
+                    </div>
+                    <button id="filterToggleBtn" class="modern-filter-btn" title="Filter Options">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+                    </button>
+                    <div id="filterDropdown" class="modern-filter-dropdown"></div>
+                </div>
+            </div>
+            <div class="filter-bar">
+                <div style="display: flex; gap: 10px;">
+                    <div class="filter-btn active" id="tabClientsBtn" onclick="switchAdminTab('clients')">Clients</div>
+                    <div class="filter-btn" id="tabReportsBtn" onclick="switchAdminTab('reports')">Reports</div>
+                    <div class="filter-btn" id="tabContactsBtn" onclick="switchAdminTab('contacts')">Contacts</div>
+                    <div class="filter-btn" id="tabQuotesBtn" onclick="switchAdminTab('quotes')">Quotes</div>
+                </div>
+            </div>
+            <div class="sidebar-scroll" id="clientList">Loading...</div>
+            
+            <div id="adminAddContactWrapper" style="display: none; padding: 16px 24px; background: white; border-top: 1px solid #e2e8f0; z-index: 10;">
+                <button class="btn-access" onclick="window.openCreateAdminContactModal()" style="width: 100%; box-shadow: 0 4px 12px rgba(0,38,75,0.15); background: #10b981; border-color: #10b981;">+ Add New Contact</button>
+            </div>
+        </div>
+        <div class="main-content">
+            <div id="adminMap"></div>
+            
+            <div class="admin-dashboard-widgets" id="adminDashboardWidgets" style="display:none;">
+                <div class="stats-grid">
+                    <div class="stat-card clickable" onclick="window.filterDashboard('active', this)">
+                        <div class="stat-value" id="statActive">-</div><div class="stat-label">Active Jobs</div>
+                    </div>
+                    <div class="stat-card clickable" onclick="window.filterDashboard('inspect', this)">
+                        <div class="stat-value" id="statInspect">-</div><div class="stat-label">To Inspect</div>
+                    </div>
+                    <div class="stat-card clickable" onclick="window.filterDashboard('invoice', this)">
+                        <div class="stat-value" id="statInvoice">-</div><div class="stat-label">To Invoice</div>
+                    </div>
+                    <div class="stat-card clickable active-filter" onclick="window.filterDashboard('all', this)">
+                        <div class="stat-value" id="statPremises">-</div><div class="stat-label">Unique Locations</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="premisesScreen" class="screen">
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo-container"><img id="brandLogo" src="" alt="Client Logo"></div>
+                <p>PORTFOLIO ACCESS</p>
+            </div>
+            <div class="user-profile">
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <div class="avatar" id="userAvatar">U</div>
+                    <div><div style="font-size:13px; font-weight:600; color:#0f172a;" id="userNameDisplay">Client Name</div><div style="font-size:10px; color:#64748b; font-weight:500;">CLIENT VIEW</div></div>
+                </div>
+                    <div class="logout-link" onclick="localStorage.clear(); window.location.reload()">LOGOUT</div>            </div>
+            <div class="sidebar-search-container">
+                <div class="search-input-wrapper">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <input type="text" id="clientSearchInput" placeholder="Search premises...">
+                    <button class="clear-btn" id="clientClearSearch" style="display:none;">✕</button>
+                </div>
+            </div>
+            <div class="back-btn" id="backToAdminBtn" style="display:none;">← BACK TO ADMIN</div>
+            <div class="sidebar-scroll" id="premisesList">Loading...</div>
+        </div>
+        <div class="main-content">
+            <div id="premisesMap"></div>
+            
+            <div id="propertyDetailPanel" class="detail-panel">
+                <div class="panel-controls" style="position: absolute; top: 16px; left: 16px; z-index: 100; display: flex; gap: 10px;">
+                    <div class="close-detail" id="closeDetailBtn" title="Close">✕</div>
+                    <div class="minimize-detail" id="minimizeDetailBtn" title="Minimize Panel">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="4" y1="12" x2="20" y2="12"></line></svg>
+                    </div>
+                    <div class="maximize-detail" id="maximizeGalleryBtn" title="Fullscreen Gallery">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"></path></svg>
+                    </div>
+                </div>
+
+                <div class="detail-image">
+                    <img id="detailImg" src="">
+                    <div class="gallery-nav gallery-prev" id="prevImgBtn">‹</div>
+                    <div class="gallery-nav gallery-next" id="nextImgBtn">›</div>
+                    <div class="gallery-counter" id="imgCounter">1 / 1</div>
+                    <div class="video-overlay" id="videoBtn"><div class="play-button"><svg width="24" height="24" viewBox="0 0 24 24" fill="#00264b"><path d="M8 5v14l11-7z"/></svg></div></div>
+                </div>
+                <div class="detail-content">
+                    <div class="header-row" style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+                        <h2 class="detail-title" id="detailTitle">Property Name</h2>
+                        <button id="btnEnrichData" style="flex: none; width: auto; background: #10b981; color: white; border: none; padding: 8px 16px; font-size: 12px; font-weight: 700; border-radius: 8px; cursor: pointer; display: none; transition: 0.2s; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">Auto-Enrich</button>
+                    </div>
+                    
+                    <div class="detail-address" style="font-size:14px; color:#64748b; margin-bottom:24px; font-weight:400;" id="detailAddress">Address</div>
+
+                    <div class="detail-grid">
+                        <div><div class="data-label">Floor Area</div><div class="data-value" id="detailFloor">-</div></div>
+                        <div><div class="data-label">Site Area</div><div class="data-value" id="detailSite">-</div></div>
+                        <div><div class="data-label">Sector</div><div class="data-value" id="detailSector">-</div></div>
+                        <div><div class="data-label">Age</div><div class="data-value" id="detailAge">-</div></div>
+                        
+                        <div style="grid-column: span 2;">
+                            <div class="data-label">Legal Description</div>
+                            <div class="data-value" id="detailLegal" style="font-family: monospace; font-size: 13px; line-height: 1.4;">-</div>
+                        </div>
+
+                        <div><div class="data-label">Surveyed By</div><div class="data-value" id="detailSurveyor">-</div></div>
+                        <div><div class="data-label">Last Inspected</div><div class="data-value" id="detailInspected">-</div></div>
+                        <div><div class="data-label">Delivered</div><div class="data-value" id="detailDelivery">-</div></div>
+                    </div>
+
+                    <div class="reports-header" style="font-size:11px; font-weight:700; color:#64748b; margin-top:32px; border-bottom:2px solid #f1f5f9; padding-bottom:12px; letter-spacing:1px; text-transform: uppercase;">REPORTS & DOCUMENTS</div>
+                    
+                    <table class="reports-table">
+                        <thead id="reportsTableHeader"></thead> 
+                        <tbody id="reportsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="xeroMappingModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); z-index: 999999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="width: 100%; max-width: 600px; padding: 24px; border-radius: 12px; background: #ffffff; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="margin: 0; color: #0f172a; font-size: 18px;">Link Xero Contacts</h2>
+                <button onclick="document.getElementById('xeroMappingModal').style.display='none'" style="background: none; border: none; font-size: 24px; color: #64748b; cursor: pointer;">&times;</button>
+            </div>
+            
+            <div id="mappingLoading" style="text-align: center; padding: 20px; color: #64748b;">
+                <span class="spin" style="display: inline-block; margin-right: 8px;">🔄</span> Loading clients and Xero contacts...
+            </div>
+
+            <div id="mappingContent" style="display: none; max-height: 400px; overflow-y: auto;">
+                <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e2e8f0;">
+                            <th style="padding: 10px; color: #64748b; font-size: 12px;">SUPABASE CLIENT</th>
+                            <th style="padding: 10px; color: #64748b; font-size: 12px;">XERO CONTACT</th>
+                            <th style="padding: 10px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="mappingTableBody">
+                        </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
