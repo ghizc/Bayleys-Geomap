@@ -392,6 +392,10 @@ export function filterAdminView() {
             // --- MOBILE Logic ---
             const dotColor = c.isArchived ? '#94a3b8' : (c.active > 0 ? '#10b981' : '#ef4444');
             
+            const editBtn = (state.currentUser && state.currentUser.role === 'admin') 
+                ? `<button onclick="event.stopPropagation(); window.openEditClientModal(${JSON.stringify(c).replace(/"/g, '&quot;')})" style="position: absolute; top: 16px; left: 16px; background: transparent; border: none; color: #94a3b8; cursor: pointer; transition: 0.2s; z-index: 10;" onmouseover="this.style.color='#0284c7'" onmouseout="this.style.color='#94a3b8'" title="Edit Client"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg></button>` 
+                : '';
+
             let mobileTitleHtml = '';
             if (c.website) {
                 mobileTitleHtml = `
@@ -405,6 +409,8 @@ export function filterAdminView() {
 
             return `
             <div class="card-item client-card" onclick="window.triggerClientLoad('${c.id}')" style="position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 28px 20px;">
+                
+                ${editBtn}
                 
                 <div class="mobile-layout-dot" style="display: none; position: absolute; top: 16px; right: 16px; width: 12px; height: 12px; border-radius: 50%; background-color: ${dotColor}; box-shadow: 0 0 0 2px white, 0 2px 6px rgba(0,0,0,0.15);"></div>
 
@@ -710,7 +716,36 @@ export function showDetail(p) {
         window.recenterMap = () => {
             const curP = state.currentViewedPremise;
             if (curP && state.mapInstance && curP.lat) {
+                // Focus on the specific premise
                 state.mapInstance.flyTo({ center: [curP.lng, curP.lat], range: 200, pitch: 45 });
+            } else if (state.currentUser?.role === 'client' && state.mapInstance && state.premisesData.length > 0) {
+                // 🌟 Bonus: If no premise is selected, zoom out to show the whole portfolio!
+                let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+                let validPins = 0;
+                state.premisesData.forEach(p => {
+                    if (p.lat && p.lng) {
+                        minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+                        minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng);
+                        validPins++;
+                    }
+                });
+                if (validPins > 0) {
+                    const cLat = (minLat + maxLat) / 2;
+                    const cLng = (minLng + maxLng) / 2;
+                    const maxDiff = Math.max(maxLat - minLat, maxLng - minLng);
+                    
+                    let cZoom = 4.0;
+                    if (validPins === 1) cZoom = 15.5;
+                    else if (maxDiff < 0.02) cZoom = 12.5;
+                    else if (maxDiff < 0.1) cZoom = 10.5;
+                    else if (maxDiff < 0.5) cZoom = 8.5;
+                    else if (maxDiff < 2) cZoom = 6.5;
+                    else if (maxDiff < 10) cZoom = 5.0;
+                    else if (maxDiff < 30) cZoom = 4.0;
+                    else cZoom = 3.0;
+                    
+                    state.mapInstance.flyTo({ center: [cLng, cLat], zoom: cZoom, pitch: 0, bearing: 0 });
+                }
             }
         };
     }
@@ -908,21 +943,56 @@ export function updateGalleryImage() {
 export function switchScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
-    
     const isDetailOpen = document.getElementById('propertyDetailPanel')?.classList.contains('active');
     document.getElementById('requestReportBtn').style.display = (id === 'premisesScreen' && !isDetailOpen) ? 'flex' : 'none';    
     
     requestAnimationFrame(() => {
-        // 1. Add 'async' to this setTimeout callback
+        // 🌟 THE FIX 1: Make this setTimeout callback 'async'
         setTimeout(async () => {
             const mapContainer = id === 'clientListScreen' ? 'adminMap' : 'premisesMap';
             if (document.getElementById(mapContainer)) {
                 
-                // 2. Add 'await' so it pauses until the 3D map is fully generated in the DOM
-                await initMap(mapContainer, [174.7554, -36.8454], 15.5, 60, -17.6);
+                let startLng = 174.7554;
+                let startLat = -36.8454;
+                let startZoom = 15.5;
+
+                if (id === 'premisesScreen' && state.currentUser?.role === 'client') {
+                    if (state.premisesData && state.premisesData.length > 0) {
+                        let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+                        let validPins = 0;
+                        
+                        state.premisesData.forEach(p => {
+                            if (p.lat && p.lng) {
+                                minLat = Math.min(minLat, p.lat);
+                                maxLat = Math.max(maxLat, p.lat);
+                                minLng = Math.min(minLng, p.lng);
+                                maxLng = Math.max(maxLng, p.lng);
+                                validPins++;
+                            }
+                        });
+
+                        if (validPins > 0) {
+                            startLat = (minLat + maxLat) / 2;
+                            startLng = (minLng + maxLng) / 2;
+                            const maxDiff = Math.max(maxLat - minLat, maxLng - minLng);
+                            
+                            if (validPins === 1) startZoom = 15.5;
+                            else if (maxDiff < 0.02) startZoom = 12.5; 
+                            else if (maxDiff < 0.1) startZoom = 10.5;  
+                            else if (maxDiff < 0.5) startZoom = 8.5;   
+                            else if (maxDiff < 2) startZoom = 6.5;     
+                            else if (maxDiff < 10) startZoom = 5.0;    
+                            else if (maxDiff < 30) startZoom = 4.0;    
+                            else startZoom = 3.0;                      
+                        }
+                    }
+                }
+
+                // 🌟 THE FIX 2: Add 'await' so the script pauses here until the map is 100% fully rendered
+                await initMap(mapContainer, [startLng, startLat], startZoom, 60, -17.6);
                 
-                // 3. Map is guaranteed to be ready now, drop the markers safely
-                if (state.premisesData.length > 0 && state.mapInstance) {
+                // 🌟 THE FIX 3: Now that the map is guaranteed to exist, we can safely drop the markers immediately
+                if (state.premisesData.length > 0) {
                     addMarkers(state.premisesData);
                 }
             }
