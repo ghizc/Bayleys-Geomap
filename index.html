@@ -35,7 +35,7 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <div id="deviceSimulator" style="position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 999999; background: #0f172a; padding: 6px; border-radius: 30px; display: none; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 2px solid #334155; align-items: center;">
+    <div id="deviceSimulator" style="position: fixed; top: 15px; left: 50%; transform: translateX(-50%); z-index: 999999; background: #0f172a; padding: 6px; border-radius: 30px; display: flex; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 2px solid #334155; align-items: center;">
         
         <div style="display: flex; gap: 4px; border-right: 2px solid #334155; padding-right: 8px;">
             <button onclick="updateSim('desktop', null, this)" style="background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; transition: 0.2s;" data-type="dev">Laptop</button>
@@ -75,9 +75,9 @@
 
         // Real-world dimensions (Width x Height) for Portrait and Landscape
         const simDimens = {
-            tablet:   { portrait: [820, 1180], landscape: [1180, 820] }, // iPad Air
-            foldable: { portrait: [650, 812],  landscape: [812, 650] },  // Samsung Fold / Oppo Find N
-            mobile:   { portrait: [375, 812],  landscape: [812, 375] }   // iPhone X
+            tablet:   { portrait: [820, 1180], landscape: [1180, 820] }, 
+            foldable: { portrait: [650, 812],  landscape: [812, 650] },  
+            mobile:   { portrait: [375, 812],  landscape: [812, 375] }   
         };
 
         function updateSim(mode, orient, btn) {
@@ -90,7 +90,7 @@
                 window.simState.orient = orient;
                 document.querySelectorAll('#deviceSimulator button[data-type="orient"]').forEach(b => b.style.background = 'transparent');
             }
-            btn.style.background = '#334155'; // Active color
+            if (btn) btn.style.background = '#334155'; // Active color
 
             // 2. Prep Body classes
             const currentMode = window.simState.mode;
@@ -99,35 +99,65 @@
             
             document.body.classList.remove('sim-mobile', 'sim-foldable', 'sim-tablet', 'sim-landscape', 'sim-portrait');
             
-            // 3. Reset Body styles (in case JS set them manually before)
+            // 3. Reset Body styles 
             document.body.style.width = ''; document.body.style.height = ''; 
-            document.body.style.borderRadius = ''; document.body.style.border = ''; document.body.style.margin = '';
+            document.body.style.transform = ''; document.body.style.transformOrigin = '';
 
             // 4. Apply Simulator Logic
             const dash = document.getElementById('adminDashboardWidgets');
 
             if (currentMode === 'desktop') {
                 orientGroup.style.display = 'none';
-                // Restore Dashboard if on Admin Screen
                 if (dash && document.getElementById('clientListScreen').classList.contains('active')) { 
                     dash.style.display = 'flex'; setTimeout(() => dash.classList.remove('hidden'), 10); 
                 }
             } else {
                 orientGroup.style.display = 'flex';
-                // Always hide dashboard in simulated mobile views
                 if (dash) { dash.classList.add('hidden'); setTimeout(() => dash.style.display = 'none', 300); }
 
-                // Apply dynamic CSS classes and dimensions directly via inline style (overriding CSS rules)
                 document.body.classList.add(`sim-${currentMode}`, `sim-${currentOrient}`);
                 
                 const dimensions = simDimens[currentMode][currentOrient];
                 document.body.style.width = `${dimensions[0]}px`;
                 document.body.style.height = `${dimensions[1]}px`;
+
+                // 🌟 THE FIX: Check BOTH width and height so Landscape mode doesn't blow out your screen!
+                const availableHeight = window.innerHeight - 80; // 80px buffer for your URL bar/taskbar
+                const availableWidth = window.innerWidth - 40;   // 40px buffer for side margins
+                
+                let scaleFactor = 1;
+                
+                // 1. If it's too tall, shrink it
+                if (dimensions[1] > availableHeight) {
+                    scaleFactor = availableHeight / dimensions[1];
+                }
+                
+                // 2. If it's still too wide, shrink it even more
+                if ((dimensions[0] * scaleFactor) > availableWidth) {
+                    scaleFactor = availableWidth / dimensions[0];
+                }
+                
+                if (scaleFactor < 1) {
+                    document.body.style.transform = `scale(${scaleFactor})`;
+                    document.body.style.transformOrigin = 'top center';
+                } else {
+                    // 🌟 THE FIX: Using scale(1) instead of 'none' forces the browser 
+                    // to trap full-screen elements strictly inside the simulator!
+                    document.body.style.transform = 'scale(1)'; 
+                    document.body.style.transformOrigin = 'top center';
+                }
             }
             
             // 5. Trigger resize to force map/charts to refresh layouts
             setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 300);
         }
+
+        // Add a listener so if you resize your browser window, the simulator auto-scales to match
+        window.addEventListener('resize', () => {
+            if (window.simState.mode !== 'desktop') {
+                updateSim(null, null, null);
+            }
+        });
     </script>
 
     <div id="debugConsole"></div>
@@ -443,6 +473,57 @@
                 <div class="modal-footer">
                     <button type="button" class="btn-cancel" onclick="closeCreateClientModal()">Back</button>
                     <button type="submit" class="btn-access" id="submitCreateClientBtn" style="width: auto; padding: 12px 32px;">Save Client</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editClientModalOverlay" class="modal-overlay sub-modal">
+        <div class="modal-card" style="width: 480px;">
+            <div class="modal-header">
+                <div>
+                    <h2>Edit Client</h2>
+                    <h4>Update details or paste a new logo</h4>
+                </div>
+                <button class="modal-close" onclick="closeEditClientModal()">✕</button>
+            </div>
+            <form id="editClientForm">
+                <div class="modal-body" id="editClientBody" tabindex="0" style="outline: none;">
+                    <input type="hidden" id="editClientId">
+
+                    <div style="display: flex; gap: 20px; margin-bottom: 24px; align-items: center;">
+                        <div style="width: 80px; height: 80px; border-radius: 12px; background: #f1f5f9; overflow: hidden; border: 2px solid #cbd5e1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: #94a3b8;" id="editClientLogoPreview">
+                            <span id="editClientInitials">?</span>
+                            <img src="" style="width: 100%; height: 100%; object-fit: cover; display: none;" id="editClientImgElement">
+                        </div>
+                        <div class="form-group" style="flex: 1; margin-bottom: 0;">
+                            <div class="file-upload-box" id="editClientLogoDropZone" style="min-height: 80px; padding: 12px;">
+                                <input type="file" id="editClientLogo" accept=".jpg, .jpeg, .png, .webp" onchange="previewEditClientLogo(this)">
+                                <div class="file-label-text" style="font-size: 12px;">🖼️ Click to Browse or <br><b style="color:#0284c7; font-size: 14px;">CTRL+V to Paste Logo</b></div>
+                                <div id="editClientLogoName" class="file-name-display"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Client Name</label>
+                        <input type="text" id="editClientName" class="form-input" required>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label class="form-label">Group</label>
+                            <input type="text" id="editClientGroup" class="form-input" placeholder="e.g. Corporate, Property Company">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Website</label>
+                            <input type="url" id="editClientWebsite" class="form-input" placeholder="https://...">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-cancel" onclick="closeEditClientModal()">Cancel</button>
+                    <button type="submit" class="btn-access" id="submitEditClientBtn" style="width: auto; padding: 12px 32px;">Save Updates</button>
                 </div>
             </form>
         </div>
