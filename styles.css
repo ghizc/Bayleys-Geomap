@@ -446,9 +446,11 @@ body.sim-tablet   { border-radius: 24px; }
     }
     #premisesScreen .main-content::-webkit-scrollbar, #clientListScreen .main-content::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
     
-    /* Reveal the container when the Detail Panel is clicked */
+    /* Reveal the container when the Detail Panel is clicked OR Map View is toggled */
     #premisesScreen:has(.detail-panel.active) .main-content, 
-    #clientListScreen:has(.detail-panel.active) .main-content { 
+    #clientListScreen:has(.detail-panel.active) .main-content,
+    #premisesScreen.show-map .main-content, 
+    #clientListScreen.show-map .main-content { 
         z-index: 50; opacity: 1; pointer-events: all; 
     }
     
@@ -545,7 +547,9 @@ body.sim-mobile #clientListScreen .main-content::-webkit-scrollbar, body.sim-fol
 }
 
 body.sim-mobile #premisesScreen:has(.detail-panel.active) .main-content, body.sim-foldable #premisesScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #premisesScreen:has(.detail-panel.active) .main-content,
-body.sim-mobile #clientListScreen:has(.detail-panel.active) .main-content, body.sim-foldable #clientListScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #clientListScreen:has(.detail-panel.active) .main-content { 
+body.sim-mobile #clientListScreen:has(.detail-panel.active) .main-content, body.sim-foldable #clientListScreen:has(.detail-panel.active) .main-content, body.sim-tablet.sim-portrait #clientListScreen:has(.detail-panel.active) .main-content,
+body.sim-mobile #premisesScreen.show-map .main-content, body.sim-foldable #premisesScreen.show-map .main-content, body.sim-tablet.sim-portrait #premisesScreen.show-map .main-content,
+body.sim-mobile #clientListScreen.show-map .main-content, body.sim-foldable #clientListScreen.show-map .main-content, body.sim-tablet.sim-portrait #clientListScreen.show-map .main-content { 
     z-index: 50; opacity: 1; pointer-events: all; 
 }
 
@@ -741,4 +745,56 @@ body.sim-mobile .premise-req-row > div[style*="padding: 20px"] { padding: 12px !
 .xero-select-box option:checked {
     background-color: #0ea5e9 !important;
     color: white;
+}
+
+/* ==========================================
+   🚨 HIDE MAP BACK BUTTON BEHIND DETAILS
+   ========================================== */
+.screen:has(.detail-panel.active) .btn-mobile-back {
+    display: none !important;
+}
+
+/* ==========================================
+   📸 THE UNBREAKABLE MAXIMIZED OVERRIDES
+   ========================================== */
+#propertyDetailPanel.maximized {
+    position: fixed !important; 
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    width: 100% !important; height: 100% !important;
+    max-height: none !important; min-height: 100% !important;
+    z-index: 9999999 !important;
+    background: #0f172a !important;
+    border-radius: 0 !important;
+    display: flex !important; 
+    flex-direction: column !important;
+    margin: 0 !important; padding: 0 !important;
+}
+
+#propertyDetailPanel.maximized .detail-content {
+    display: none !important;
+}
+
+#propertyDetailPanel.maximized .detail-image {
+    position: relative !important; 
+    flex: 1 !important; 
+    width: 100% !important; height: 100% !important;
+    max-height: none !important; min-height: 100% !important;
+    aspect-ratio: auto !important;
+    background: transparent !important;
+    display: block !important;
+}
+
+#propertyDetailPanel.maximized .detail-image img {
+    position: absolute !important;
+    top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+    height: 100% !important; width: 100% !important;
+    max-height: 100% !important;
+    object-fit: contain !important;
+}
+
+/* Ensure the buttons stay visible on top of the image */
+#propertyDetailPanel.maximized .panel-controls {
+    position: absolute !important;
+    top: 16px !important; left: 16px !important;
+    z-index: 10000000 !important;
 }
