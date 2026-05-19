@@ -1361,3 +1361,78 @@ document.getElementById('createAdminContactForm')?.addEventListener('submit', as
         btn.disabled = false;
     }
 });
+
+// --- EDIT CLIENT MODAL LOGIC ---
+
+window.openEditClientModal = (client) => {
+    document.getElementById('editClientId').value = client.id;
+    document.getElementById('editClientName').value = client.name || '';
+    document.getElementById('editClientGroup').value = client.group || '';
+    document.getElementById('editClientWebsite').value = client.website || '';
+    
+    // Reset Image Input
+    document.getElementById('editClientLogo').value = '';
+    document.getElementById('editClientLogoName').innerText = '';
+    
+    const previewImg = document.getElementById('editClientImgElement');
+    const initials = document.getElementById('editClientInitials');
+    
+    if (client.logo_url) {
+        previewImg.src = client.logo_url;
+        previewImg.style.display = 'block';
+        initials.style.display = 'none';
+    } else {
+        previewImg.src = '';
+        previewImg.style.display = 'none';
+        initials.style.display = 'block';
+        initials.innerText = client.name ? client.name.charAt(0).toUpperCase() : '?';
+    }
+
+    document.getElementById('editClientModalOverlay').classList.add('active');
+    setTimeout(() => document.getElementById('editClientBody').focus(), 100); // Focus for pasting
+};
+
+window.closeEditClientModal = () => {
+    document.getElementById('editClientModalOverlay').classList.remove('active');
+};
+
+// Preview Image on Select/Paste
+window.previewEditClientLogo = (input) => {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const previewImg = document.getElementById('editClientImgElement');
+            previewImg.src = e.target.result;
+            previewImg.style.display = 'block';
+            document.getElementById('editClientInitials').style.display = 'none';
+        }
+        reader.readAsDataURL(input.files[0]);
+        document.getElementById('editClientLogoName').innerText = input.files[0].name;
+    }
+};
+
+// Catch CTRL+V Pasted Logos
+document.getElementById('editClientBody')?.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    const input = document.getElementById('editClientLogo');
+    const dt = new DataTransfer();
+    let hasImage = false;
+
+    for (let item of items) {
+        if (item.type.indexOf('image') !== -1) {
+            const file = item.getAsFile();
+            const ext = file.name && file.name.includes('.') ? file.name.split('.').pop() : 'png';
+            const renamedFile = new File([file], `pasted_logo_${Date.now()}.${ext}`, { type: file.type });
+            dt.items.add(renamedFile);
+            hasImage = true;
+            break; // Only take the first image pasted for logos
+        }
+    }
+
+    if (hasImage) {
+        input.files = dt.files;
+        window.previewEditClientLogo(input);
+    }
+});
