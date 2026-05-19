@@ -776,10 +776,10 @@ document.getElementById('prevImgBtn')?.addEventListener('click', (e) => {
 });
 
 // NEW: Minimize Panel Toggle
-document.getElementById('minimizeDetailBtn')?.addEventListener('click', (e) => {
+document.getElementById('minimizeDetailBtn').onclick = (e) => {
     e.stopPropagation();
     document.getElementById('propertyDetailPanel').classList.toggle('minimized');
-});
+};
 
 document.getElementById('backToAdminBtn')?.addEventListener('click', async () => {
     state.currentUser = { role: 'admin', name: 'Bayleys Admin', id: ADMIN_UUID };
@@ -957,6 +957,7 @@ document.getElementById('maximizeGalleryBtn')?.addEventListener('click', async (
     if (!panel) return;
 
     const isFullscreen = panel.classList.toggle('fullscreen-gallery');
+    panel.classList.toggle('maximized', isFullscreen); // <-- Add this line to trigger your CSS overrides
     
     if (isFullscreen) {
         btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"></path></svg>`;
@@ -1031,14 +1032,20 @@ document.getElementById('maximizeGalleryBtn')?.addEventListener('click', async (
 // IMPORTANT: Merged closeDetailBtn logic to ensure it wipes the fullscreen state safely
 document.getElementById('closeDetailBtn')?.addEventListener('click', () => {
     const panel = document.getElementById('propertyDetailPanel');
-    if (panel) panel.classList.remove('active', 'minimized', 'fullscreen-gallery'); // Clean slate
+    // Ensure 'maximized' is removed during the clean slate process
+    if (panel) panel.classList.remove('active', 'minimized', 'fullscreen-gallery', 'maximized'); 
     state.currentViewedPremise = null;
     
     // Restore sidebar highlights and map zoom
     import('../map.js').then(mapMod => mapMod.highlightMarker(null));
     if (window.highlightSidebarCard) window.highlightSidebarCard(null); 
     
-    if (state.mapInstance) state.mapInstance.flyTo({ zoom: 14, pitch: 0 });
+    // 🌟 THE FIX 1: Use the smart framing logic when closing a property
+    if (window.recenterMap) {
+        window.recenterMap();
+    } else if (state.mapInstance) {
+        state.mapInstance.flyTo({ zoom: 14, pitch: 0 });
+    }
     
     if (document.getElementById('clientListScreen').classList.contains('active')) {
         const isMobile = window.innerWidth <= 900 || document.body.classList.contains('sim-mobile') || document.body.classList.contains('sim-tablet');
@@ -1047,3 +1054,148 @@ document.getElementById('closeDetailBtn')?.addEventListener('click', () => {
         document.getElementById('requestReportBtn').style.display = 'flex';
     }
 });
+
+document.getElementById('editClientForm')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('submitEditClientBtn');
+    const ogText = btn.innerText;
+    btn.innerText = 'Saving...';
+    btn.disabled = true;
+
+    try {
+        const id = document.getElementById('editClientId').value;
+        const name = document.getElementById('editClientName').value.trim();
+        const group = document.getElementById('editClientGroup').value.trim();
+        const website = document.getElementById('editClientWebsite').value.trim();
+        const logoFile = document.getElementById('editClientLogo').files[0];
+
+        let logo_url = null;
+
+        // 1. Upload Logo if a new one was pasted/selected
+        if (logoFile) {
+            const fileExt = logoFile.name.split('.').pop();
+            const fileName = `client_logos/${id}_${Date.now()}.${fileExt}`;
+            
+            // UPDATED: Using your actual GEOMAP-Images bucket!
+            const { data: uploadData, error: uploadErr } = await supabase.storage
+                .from('GEOMAP-Images') 
+                .upload(fileName, logoFile, { cacheControl: '3600', upsert: true });
+
+            if (uploadErr) throw uploadErr;
+
+            const { data: pubData } = supabase.storage.from('GEOMAP-Images').getPublicUrl(fileName);
+            logo_url = pubData.publicUrl;
+        }
+
+        // 2. Build update payload
+        const updates = { 
+            name, 
+            group: group || null, 
+            website: website || null 
+        };
+        
+        // Only update logo_url if a new image was actually uploaded
+        if (logo_url) updates.logo_url = logo_url;
+
+        // 3. Update Supabase Database
+        const { error: updateErr } = await supabase
+            .from('clients')
+            .update(updates)
+            .eq('id', id);
+
+        if (updateErr) throw updateErr;
+
+        window.closeEditClientModal();
+        
+        // Refresh your client list to show the new data!
+        if (window.loadAdminClients) await window.loadAdminClients(); 
+
+    } catch (err) {
+        console.error("Error updating client:", err);
+        alert("Failed to update client. Check console for details.");
+    } finally {
+        btn.innerText = ogText;
+        btn.disabled = false;
+    }
+});
+
+// ==========================================
+// NATIVE SWIPE & MOBILE MAP ESCAPE UI
+// ==========================================
+setTimeout(() => {
+    const escapeHtml = `
+        <div class="mobile-only swipe-safe-zone" style="position: absolute; top: 0; left: 0; width: 25px; height: 100%; z-index: 9999;"></div>
+        
+        <button class="mobile-only btn-mobile-back" onclick="document.querySelector('.screen.active').classList.remove('show-map')" style="position: absolute; top: 16px; left: 16px; padding: 10px 16px; background: #00264b; color: white; border: none; border-radius: 20px; font-weight: 700; font-size: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); z-index: 10000; align-items: center; gap: 6px; cursor: pointer; transition: 0.2s;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg> Back to List
+        </button>
+    `;
+    // Inject into both Admin and Client map containers
+    document.querySelector('#clientListScreen .main-content')?.insertAdjacentHTML('beforeend', escapeHtml);
+    document.querySelector('#premisesScreen .main-content')?.insertAdjacentHTML('beforeend', escapeHtml);
+}, 500);
+
+let touchStartX = 0;
+let touchStartY = 0;
+let isMultiTouch = false;
+
+document.addEventListener('touchstart', (e) => {
+    // 🌟 THE FIX: If 2 or more fingers are down (e.g., pinching), abort swipe tracking!
+    if (e.touches.length > 1) {
+        isMultiTouch = true;
+        return;
+    }
+    isMultiTouch = false;
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+}, { passive: true });
+
+document.addEventListener('touchend', (e) => {
+    // 🌟 THE FIX: If this gesture was a pinch, ignore it entirely until all fingers leave the screen
+    if (isMultiTouch) {
+        if (e.touches.length === 0) isMultiTouch = false;
+        return;
+    }
+
+    const touchEndX = e.changedTouches[0].screenX;
+    const touchEndY = e.changedTouches[0].screenY;
+    
+    const dx = touchEndX - touchStartX;
+    const dy = touchEndY - touchStartY;
+    
+    // Ensure it's a deliberate horizontal swipe (ignoring vertical scrolling)
+    if (Math.abs(dx) > 50 && Math.abs(dy) < 60) {
+        const screen = document.querySelector('.screen.active');
+        if (!screen) return;
+        
+        const isMobile = window.innerWidth <= 900 || document.body.classList.contains('sim-mobile') || document.body.classList.contains('sim-tablet') || document.body.classList.contains('sim-foldable');
+        if (!isMobile) return;
+
+        const isMapVisible = screen.classList.contains('show-map');
+        const detailPanel = screen.querySelector('.detail-panel');
+        const isDetailVisible = detailPanel && detailPanel.classList.contains('active');
+
+        if (dx < -50) {
+            // 👈 SWIPE LEFT: Open Map (Only if detail panel isn't in the way)
+            if (!isMapVisible && !isDetailVisible) {
+                screen.classList.add('show-map');
+                
+                // 🌟 THE FIX 2: Force the camera to frame the portfolio when sliding the map open
+                if (window.recenterMap) window.recenterMap();
+                
+                setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
+            }
+        } else if (dx > 50) {
+            // 👉 SWIPE RIGHT: Close Map OR Close Detail Panel
+            if (isMapVisible) {
+                // 🌟 THE FIX: Tightened the left-edge requirement to 30px so panning left doesn't trigger it
+                if (touchStartX < 30) {
+                    screen.classList.remove('show-map');
+                }
+            } else if (isDetailVisible) {
+                const closeBtn = document.getElementById('closeDetailBtn');
+                if (closeBtn) closeBtn.click();
+            }
+        }
+    }
+}, { passive: true });
